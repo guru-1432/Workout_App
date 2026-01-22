@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AntiGravity Workouts</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+
+    <!-- React & Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+
+<body>
+    <div id="root"></div>
+    <div id="error-display" style="color: red; padding: 20px; display: none;"></div>
+    <script>
+        window.onerror = function (message, source, lineno, colno, error) {
+            const display = document.getElementById('error-display');
+            display.style.display = 'block';
+            display.innerHTML += `<div>Error: ${message} at ${source}:${lineno}</div>`;
+        };
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- API Helpers ---
+        const api = axios.create({
+            baseURL: '/api'
+        });
+
+        // --- Icons (Lucide) ---
+        // We will maintain simple SVG icons or text for simplicity if lucide script doesn't auto-replace in react
+        const IconDumbbell = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6.5 6.5 11 11" /><path d="m21 21-1-1" /><path d="m3 3 1 1" /><path d="m18 22 4-4" /><path d="m2 6 4-4" /><path d="m3 10 7-7" /><path d="m14 21 7-7" /></svg>;
+        const IconHistory = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5" /><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" /><path d="M12 7v5l4 2" /></svg>;
+        const IconPlus = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>;
+        const IconSettings = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
+        const IconLogOut = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>;
+
+        // --- Components ---
+
+        function Login({ onLogin }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    const params = new URLSearchParams();
+                    params.append('username', username);
+                    params.append('password', password);
+
+                    const res = await axios.post('/token', params);
+                    const token = res.data.access_token;
+                    localStorage.setItem('token', token);
+                    onLogin(token);
+                } catch (err) {
+                    setError('Invalid credentials');
+                }
+            };
+
+            return (
+                <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center' }}>
+                    <h1>Welcome Back</h1>
+                    <div className="glass-card">
+                        <form onSubmit={handleSubmit}>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label className="set-label">Username</label>
+                                <input type="text" value={username} onChange={e => setUsername(e.target.value)} />
+                            </div>
+                            <div style={{ marginBottom: '24px' }}>
+                                <label className="set-label">Password</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} />
+                            </div>
+                            {error && <div style={{ color: 'red', marginBottom: '16px', fontSize: '0.9rem' }}>{error}</div>}
+                            <button className="btn" type="submit">Unlock App</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        function Navbar({ page, setPage, onLogout }) {
+            return (
+                <div className="nav-bar">
+                    <div className={`nav-item ${page === 'dashboard' ? 'active' : ''}`} onClick={() => setPage('dashboard')}>
+                        <IconDumbbell />
+                        <span>Log</span>
+                    </div>
+                    <div className={`nav-item ${page === 'history' ? 'active' : ''}`} onClick={() => setPage('history')}>
+                        <IconHistory />
+                        <span>History</span>
+                    </div>
+                    <div className={`nav-item ${page === 'admin' ? 'active' : ''}`} onClick={() => setPage('admin')}>
+                        <IconSettings />
+                        <span>Admin</span>
+                    </div>
+                    <div className="nav-item" onClick={onLogout}>
+                        <IconLogOut />
+                        <span>Logout</span>
+                    </div>
+                </div>
+            );
+        }
+
+        function Dashboard({ onLogStart }) {
+            const [muscles, setMuscles] = useState([]);
+
+            useEffect(() => {
+                api.get('/muscles').then(res => setMuscles(res.data));
+            }, []);
+
+            return (
+                <div className="page-container animate-fade-in">
+                    <h1>Lets Crush It!</h1>
+                    <div className="glass-card">
+                        <h3>Start Workout</h3>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>Select a focus group</p>
+                        <div className="muscle-grid">
+                            {muscles.map(m => (
+                                <div key={m.id} className="muscle-card" onClick={() => onLogStart(m)}>
+                                    {m.name}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function Logger({ muscle, onBack, onComplete }) {
+            const [exercises, setExercises] = useState([]);
+            const [sessionSets, setSessionSets] = useState({}); // { exerciseId: [{weight, reps}, ...] }
+
+            useEffect(() => {
+                if (muscle) {
+                    api.get(`/exercises/${muscle.id}`).then(res => setExercises(res.data));
+                }
+            }, [muscle]);
+
+            const addSet = (exId) => {
+                setSessionSets(prev => ({
+                    ...prev,
+                    [exId]: [...(prev[exId] || []), { weight: 0, reps: 0 }]
+                }));
+            };
+
+            const updateSet = (exId, index, field, value) => {
+                const newSets = [...(sessionSets[exId] || [])];
+                newSets[index] = { ...newSets[index], [field]: value };
+                setSessionSets(prev => ({ ...prev, [exId]: newSets }));
+            };
+
+            const handleSubmit = async () => {
+                // Construct payload
+                const setsPayload = [];
+                Object.keys(sessionSets).forEach(exId => {
+                    sessionSets[exId].forEach(s => {
+                        if (s.reps > 0) { // Only valid sets
+                            setsPayload.push({
+                                exercise_id: parseInt(exId),
+                                weight: parseFloat(s.weight),
+                                reps: parseInt(s.reps)
+                            });
+                        }
+                    });
+                });
+
+                if (setsPayload.length === 0) return alert("Log at least one set!");
+
+                await api.post('/log', {
+                    date: new Date().toISOString(),
+                    sets: setsPayload
+                });
+                onComplete();
+            };
+
+            return (
+                <div className="page-container animate-fade-in">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                        <button className="btn-secondary" style={{ width: 'auto', padding: '8px' }} onClick={onBack}>&larr;</button>
+                        <h2>{muscle.name} Workout</h2>
+                    </div>
+
+                    {exercises.map(ex => (
+                        <div key={ex.id} className="glass-card exercise-log">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3>{ex.name}</h3>
+                                <button className="btn btn-secondary" style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => addSet(ex.id)}>+ Set</button>
+                            </div>
+
+                            {(sessionSets[ex.id] || []).map((s, idx) => (
+                                <div key={idx} className="set-row">
+                                    <div>
+                                        <span className="set-label">Kg</span>
+                                        <input type="number" value={s.weight} onChange={e => updateSet(ex.id, idx, 'weight', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <span className="set-label">Reps</span>
+                                        <input type="number" value={s.reps} onChange={e => updateSet(ex.id, idx, 'reps', e.target.value)} />
+                                    </div>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                        #{idx + 1}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+
+                    <button className="btn py-4" onClick={handleSubmit}>Finish Workout</button>
+                </div>
+            );
+        }
+
+        function History({ onSelect }) {
+            const [history, setHistory] = useState([]);
+            const [muscles, setMuscles] = useState([]);
+
+            useEffect(() => {
+                api.get('/history').then(res => setHistory(res.data));
+                api.get('/muscles').then(res => setMuscles(res.data));
+            }, []);
+
+            const getMuscleName = (id) => {
+                const m = muscles.find(m => m.id === id);
+                return m ? m.name : 'Unknown';
+            };
+
+            return (
+                <div className="page-container animate-fade-in">
+                    <h1>History</h1>
+                    {history.map(h => (
+                        <div key={h.id} className="glass-card" onClick={() => onSelect(h)} style={{ cursor: 'pointer' }}>
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '8px' }}>
+                                {new Date(h.date).toLocaleDateString()} at {new Date(h.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+
+                            {/* Derive Muscle Groups from sets */}
+                            <div style={{ fontWeight: 'bold', marginBottom: '8px', color: 'var(--primary)' }}>
+                                {Array.from(new Set(h.sets.map(s => s.exercise?.muscle_id ? getMuscleName(s.exercise.muscle_id) : 'Unknown'))).join(', ') || 'Workout'}
+                            </div>
+
+                            <div style={{ fontSize: '0.9rem' }}>
+                                {h.sets.length} sets logged.
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )
+        }
+
+        function HistoryDetails({ session, onBack }) {
+            return (
+                <div className="page-container animate-fade-in">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                        <button className="btn-secondary" style={{ width: 'auto', padding: '8px' }} onClick={onBack}>&larr;</button>
+                        <h2>Workout Details</h2>
+                    </div>
+
+                    <div className="glass-card">
+                        <div style={{ marginBottom: '20px', color: 'var(--text-muted)' }}>
+                            {new Date(session.date).toLocaleString()}
+                        </div>
+
+                        {session.sets.map((s, i) => (
+                            <div key={i} style={{ borderBottom: '1px solid var(--border)', padding: '10px 0' }}>
+                                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{s.exercise?.name || 'Unknown Exercise'}</div>
+                                <div style={{ display: 'flex', gap: '20px', fontSize: '0.9rem' }}>
+                                    <span>Weight: {s.weight} kg</span>
+                                    <span>Reps: {s.reps}</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+
+        function Admin() {
+            const [muscles, setMuscles] = useState([]);
+            const [selectedMuscle, setSelectedMuscle] = useState(null);
+            const [newMuscle, setNewMuscle] = useState("");
+            const [exercises, setExercises] = useState([]);
+            const [newExercise, setNewExercise] = useState("");
+
+            const refreshMuscles = () => api.get('/muscles').then(res => setMuscles(res.data));
+
+            useEffect(() => { refreshMuscles(); }, []);
+
+            useEffect(() => {
+                if (selectedMuscle) {
+                    api.get(`/exercises/${selectedMuscle.id}`).then(res => setExercises(res.data));
+                } else {
+                    setExercises([]);
+                }
+            }, [selectedMuscle]);
+
+            const handleAddMuscle = async () => {
+                if (!newMuscle) return;
+                await api.post('/muscles', { name: newMuscle });
+                setNewMuscle("");
+                refreshMuscles();
+            };
+
+            const handleDeleteMuscle = async (id, e) => {
+                e.stopPropagation();
+                if (!confirm("Are you sure? This will delete all exercises too.")) return;
+                await api.delete(`/muscles/${id}`);
+                if (selectedMuscle?.id === id) setSelectedMuscle(null);
+                refreshMuscles();
+            };
+
+            const handleAddExercise = async () => {
+                if (!newExercise || !selectedMuscle) return;
+                await api.post('/exercises', { name: newExercise, muscle_id: selectedMuscle.id });
+                setNewExercise("");
+                api.get(`/exercises/${selectedMuscle.id}`).then(res => setExercises(res.data));
+            };
+
+            const handleDeleteExercise = async (id) => {
+                await api.delete(`/exercises/${id}`);
+                api.get(`/exercises/${selectedMuscle.id}`).then(res => setExercises(res.data));
+            };
+
+            return (
+                <div className="page-container animate-fade-in">
+                    <h1>Admin</h1>
+
+                    <div className="glass-card">
+                        <h3>Muscles</h3>
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                            <input value={newMuscle} onChange={e => setNewMuscle(e.target.value)} placeholder="New Muscle Group" />
+                            <button className="btn" style={{ width: 'auto' }} onClick={handleAddMuscle}>Add</button>
+                        </div>
+                        <div className="muscle-grid">
+                            {muscles.map(m => (
+                                <div key={m.id} className={`muscle-card ${selectedMuscle?.id === m.id ? 'selected' : ''}`} onClick={() => setSelectedMuscle(m)}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>{m.name}</span>
+                                        <span onClick={(e) => handleDeleteMuscle(m.id, e)} style={{ color: 'red', cursor: 'pointer' }}>&times;</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {selectedMuscle && (
+                        <div className="glass-card animate-fade-in">
+                            <h3>Exercises for {selectedMuscle.name}</h3>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                                <input value={newExercise} onChange={e => setNewExercise(e.target.value)} placeholder="New Exercise" />
+                                <button className="btn" style={{ width: 'auto' }} onClick={handleAddExercise}>Add</button>
+                            </div>
+                            <div>
+                                {exercises.map(ex => (
+                                    <div key={ex.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                                        <span>{ex.name}</span>
+                                        <button className="btn-secondary" style={{ width: 'auto', padding: '2px 8px' }} onClick={() => handleDeleteExercise(ex.id)}>&times;</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function App() {
+            const [page, setPage] = useState('dashboard');
+            const [token, setToken] = useState(localStorage.getItem('token'));
+            const [selectedMuscle, setSelectedMuscle] = useState(null);
+            const [selectedHistory, setSelectedHistory] = useState(null);
+
+            useEffect(() => {
+                if (token) {
+                    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                    // Handle 401s globally
+                    const interceptor = api.interceptors.response.use(
+                        response => response,
+                        error => {
+                            if (error.response && error.response.status === 401) {
+                                handleLogout();
+                            }
+                            return Promise.reject(error);
+                        }
+                    );
+                    return () => api.interceptors.response.eject(interceptor);
+                }
+            }, [token]);
+
+            const handleLogout = () => {
+                localStorage.removeItem('token');
+                setToken(null);
+                setPage('dashboard');
+            };
+
+            const handleLogStart = (muscle) => {
+                setSelectedMuscle(muscle);
+                setPage('logger');
+            };
+
+            const handleComplete = () => {
+                // Reset and go history or dashboard
+                setSelectedMuscle(null);
+                setPage('history');
+            };
+
+            if (!token) {
+                return <Login onLogin={setToken} />;
+            }
+
+            return (
+                <React.Fragment>
+                    {page === 'dashboard' && <Dashboard onLogStart={handleLogStart} />}
+                    {page === 'logger' && <Logger muscle={selectedMuscle} onBack={() => setPage('dashboard')} onComplete={handleComplete} />}
+                    {page === 'history' && !selectedHistory && <History onSelect={setSelectedHistory} />}
+                    {page === 'history' && selectedHistory && <HistoryDetails session={selectedHistory} onBack={() => setSelectedHistory(null)} />}
+                    {page === 'admin' && <Admin />}
+
+                    {(!selectedHistory || page !== 'history') && <Navbar page={page} setPage={setPage} onLogout={handleLogout} />}
+                </React.Fragment>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
