@@ -1,7 +1,19 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Date, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+    reset_token = Column(String, nullable=True)
+
+    sessions = relationship("WorkoutSession", back_populates="user")
+
 
 class Muscle(Base):
     __tablename__ = "muscles"
@@ -25,6 +37,7 @@ class WorkoutSession(Base):
     __tablename__ = "workout_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
     date = Column(DateTime, default=datetime.utcnow)
     # Could imply a focus muscle, but allowing flexibility is better.
     # User said: "When I log will select which muscle group I will train today"
@@ -32,6 +45,7 @@ class WorkoutSession(Base):
     # Let's keep it simple for now. 
 
     sets = relationship("WorkoutSet", back_populates="session")
+    user = relationship("User", back_populates="sessions")
 
 class WorkoutSet(Base):
     __tablename__ = "workout_sets"

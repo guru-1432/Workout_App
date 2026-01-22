@@ -52,46 +52,123 @@
 
         // --- Components ---
 
-        function Login({ onLogin }) {
-            const [username, setUsername] = useState('');
+        function Auth({ onLogin }) {
+            const [mode, setMode] = useState('login'); // login, register, forgot
+            const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
+            const [msg, setMsg] = useState('');
             const [error, setError] = useState('');
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                try {
-                    const params = new URLSearchParams();
-                    params.append('username', username);
-                    params.append('password', password);
+                setError('');
+                setMsg('');
 
-                    const res = await axios.post('/token', params);
-                    const token = res.data.access_token;
-                    localStorage.setItem('token', token);
-                    onLogin(token);
+                try {
+                    if (mode === 'login') {
+                        const params = new URLSearchParams();
+                        params.append('username', email);
+                        params.append('password', password);
+                        const res = await axios.post('/token', params);
+                        const token = res.data.access_token;
+                        localStorage.setItem('token', token);
+                        onLogin(token);
+                    } else if (mode === 'register') {
+                        const res = await axios.post('/register', { email, password });
+                        const token = res.data.access_token;
+                        localStorage.setItem('token', token);
+                        onLogin(token);
+                    } else if (mode === 'forgot') {
+                        const res = await axios.post('/forgot-password', { email });
+                        setMsg(res.data.msg || 'Check your email.');
+                    }
                 } catch (err) {
-                    setError('Invalid credentials');
+                    console.error(err);
+                    setError(err.response?.data?.detail || 'An error occurred');
                 }
             };
 
             return (
                 <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center' }}>
-                    <h1>Welcome Back</h1>
+                    <h1>{mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Join Us' : 'Reset Password'}</h1>
                     <div className="glass-card">
                         <form onSubmit={handleSubmit}>
                             <div style={{ marginBottom: '16px' }}>
-                                <label className="set-label">Username</label>
-                                <input type="text" value={username} onChange={e => setUsername(e.target.value)} />
+                                <label className="set-label">Email</label>
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
                             </div>
-                            <div style={{ marginBottom: '24px' }}>
-                                <label className="set-label">Password</label>
-                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} />
-                            </div>
+                            {mode !== 'forgot' && (
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label className="set-label">Password</label>
+                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                                </div>
+                            )}
+                            
                             {error && <div style={{ color: 'red', marginBottom: '16px', fontSize: '0.9rem' }}>{error}</div>}
-                            <button className="btn" type="submit">Unlock App</button>
+                            {msg && <div style={{ color: 'lime', marginBottom: '16px', fontSize: '0.9rem' }}>{msg}</div>}
+                            
+                            <button className="btn" type="submit">
+                                {mode === 'login' ? 'Unlock App' : mode === 'register' ? 'Create Account' : 'Send Reset Link'}
+                            </button>
                         </form>
+
+                        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
+                            {mode === 'login' && (
+                                <>
+                                    <div style={{ marginBottom: '10px' }}><a href="#" onClick={(e) => { e.preventDefault(); setMode('register'); setError(''); }}>Create an account</a></div>
+                                    <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); setError(''); }}>Forgot password?</a></div>
+                                </>
+                            )}
+                            {mode === 'register' && (
+                                <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setError(''); }}>Back to Login</a></div>
+                            )}
+                            {mode === 'forgot' && (
+                                <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setError(''); }}>Back to Login</a></div>
+                            )}
+                        </div>
                     </div>
                 </div>
             );
+        }
+
+        function ResetPassword({ token, onComplete }) {
+             const [password, setPassword] = useState('');
+             const [msg, setMsg] = useState('');
+             const [error, setError] = useState('');
+
+             const handleSubmit = async (e) => {
+                 e.preventDefault();
+                 try {
+                     await axios.post('/reset-password', { token, new_password: password });
+                     setMsg('Password updated! Redirecting...');
+                     setTimeout(() => {
+                         window.history.replaceState({}, document.title, "/"); // Clear URL
+                         onComplete();
+                     }, 2000);
+                 } catch (err) {
+                    setError(err.response?.data?.detail || 'Failed to reset password');
+                 }
+             };
+
+             return (
+                <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center' }}>
+                    <h1>Set New Password</h1>
+                    <div className="glass-card">
+                         {msg ? (
+                             <div style={{ textAlign: 'center', color: 'lime' }}>{msg}</div>
+                         ) : (
+                            <form onSubmit={handleSubmit}>
+                                <div style={{ marginBottom: '24px' }}>
+                                    <label className="set-label">New Password</label>
+                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+                                </div>
+                                {error && <div style={{ color: 'red', marginBottom: '16px', fontSize: '0.9rem' }}>{error}</div>}
+                                <button className="btn" type="submit">Update Password</button>
+                            </form>
+                         )}
+                    </div>
+                </div>
+             );
         }
 
         function Navbar({ page, setPage, onLogout }) {
@@ -385,6 +462,10 @@
             const [token, setToken] = useState(localStorage.getItem('token'));
             const [selectedMuscle, setSelectedMuscle] = useState(null);
             const [selectedHistory, setSelectedHistory] = useState(null);
+            
+            // Checks for reset token in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const resetToken = urlParams.get('token');
 
             useEffect(() => {
                 if (token) {
@@ -420,8 +501,12 @@
                 setPage('history');
             };
 
+            if (resetToken) {
+                return <ResetPassword token={resetToken} onComplete={() => window.location.href = '/'} />;
+            }
+
             if (!token) {
-                return <Login onLogin={setToken} />;
+                return <Auth onLogin={setToken} />;
             }
 
             return (
