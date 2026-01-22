@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic_settings import BaseSettings
 from typing import Optional
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 import os
 import secrets
 
@@ -38,6 +40,7 @@ class Settings(BaseSettings):
     mail_starttls: bool = True
     mail_ssl_tls: bool = False
     base_url: str = "http://localhost:8000"
+    google_client_id: str = "your_google_client_id_here"
 
     class Config:
         env_file = ".env"
@@ -92,71 +95,32 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-@app.post("/register", response_model=schemas.Token)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_email(db, email=user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    crud.create_user(db=db, user=user)
-    
-    # Auto-login
-    access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/token", response_model=schemas.Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not crud.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@app.post("/forgot-password")
-async def forgot_password(request: schemas.PasswordResetRequest, db: Session = Depends(get_db)):
-    user = crud.get_user_by_email(db, email=request.email)
-    if not user:
-        # Don't reveal that the user doesn't exist
-        return {"msg": "If this email is registered, you will receive a reset link."}
-    
-    token = secrets.token_urlsafe(32)
-    crud.set_reset_token(db, user, token)
-    
-    reset_link = f"{settings.base_url}/reset-password.html?token={token}"
-    
-    message = MessageSchema(
-        subject="Password Reset Request",
-        recipients=[user.email],
-        body=f"Click the following link to reset your password: {reset_link}",
-        subtype=MessageType.plain
-    )
-    
-    fm = FastMail(conf)
+@app.post("/auth/google", response_model=schemas.Token)
+def google_authenticate(login_data: schemas.GoogleLogin, db: Session = Depends(get_db)):
     try:
-        await fm.send_message(message)
-    except Exception as e:
-        print(f"Error sending email: {e}")
-        raise HTTPException(status_code=500, detail="Error sending email")
-        
-    return {"msg": "Password reset email sent"}
+        # Verify the token
+        id_info = id_token.verify_oauth2_token(
+            login_data.token, 
+            google_requests.Request(), 
+            settings.google_client_id
+        )
+        email = id_info['email']
+    except ValueError as e:
+        print(f"Token verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
 
-@app.post("/reset-password")
-def reset_password(request: schemas.PasswordResetConfirm, db: Session = Depends(get_db)):
-    user = crud.get_user_by_reset_token(db, request.token)
+    # Check if user exists
+    user = crud.get_user_by_email(db, email=email)
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
-        
-    crud.update_user_password(db, user, request.new_password)
-    return {"msg": "Password updated successfully"}
+        # Auto-register
+        user = crud.create_user(db, schemas.UserCreate(email=email))
+    
+    # Create session token
+    access_token_expires = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 # --- Routes (Protected) ---
 

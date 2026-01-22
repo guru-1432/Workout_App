@@ -21,6 +21,8 @@
 
     <!-- Axios -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- Google Sign-In -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body>
@@ -53,122 +55,42 @@
         // --- Components ---
 
         function Auth({ onLogin }) {
-            const [mode, setMode] = useState('login'); // login, register, forgot
-            const [email, setEmail] = useState('');
-            const [password, setPassword] = useState('');
-            const [msg, setMsg] = useState('');
-            const [error, setError] = useState('');
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                setError('');
-                setMsg('');
-
-                try {
-                    if (mode === 'login') {
-                        const params = new URLSearchParams();
-                        params.append('username', email);
-                        params.append('password', password);
-                        const res = await axios.post('/token', params);
-                        const token = res.data.access_token;
-                        localStorage.setItem('token', token);
-                        onLogin(token);
-                    } else if (mode === 'register') {
-                        const res = await axios.post('/register', { email, password });
-                        const token = res.data.access_token;
-                        localStorage.setItem('token', token);
-                        onLogin(token);
-                    } else if (mode === 'forgot') {
-                        const res = await axios.post('/forgot-password', { email });
-                        setMsg(res.data.msg || 'Check your email.');
-                    }
-                } catch (err) {
-                    console.error(err);
-                    setError(err.response?.data?.detail || 'An error occurred');
+            useEffect(() => {
+                /* global google */
+                if (window.google) {
+                    google.accounts.id.initialize({
+                        client_id: "your_google_client_id_here",
+                        callback: handleCredentialResponse
+                    });
+                    google.accounts.id.renderButton(
+                        document.getElementById("buttonDiv"),
+                        { theme: "outline", size: "large", width: 250 }
+                    );
+                    // google.accounts.id.prompt(); 
                 }
-            };
+            }, []);
+
+            const handleCredentialResponse = async (response) => {
+                try {
+                    const res = await axios.post('/auth/google', { token: response.credential });
+                    const token = res.data.access_token;
+                    localStorage.setItem('token', token);
+                    onLogin(token);
+                } catch (err) {
+                    console.error("Login failed", err);
+                    alert("Login failed. Check console for details.");
+                }
+            }
 
             return (
-                <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center' }}>
-                    <h1>{mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Join Us' : 'Reset Password'}</h1>
-                    <div className="glass-card">
-                        <form onSubmit={handleSubmit}>
-                            <div style={{ marginBottom: '16px' }}>
-                                <label className="set-label">Email</label>
-                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-                            </div>
-                            {mode !== 'forgot' && (
-                                <div style={{ marginBottom: '24px' }}>
-                                    <label className="set-label">Password</label>
-                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                                </div>
-                            )}
-                            
-                            {error && <div style={{ color: 'red', marginBottom: '16px', fontSize: '0.9rem' }}>{error}</div>}
-                            {msg && <div style={{ color: 'lime', marginBottom: '16px', fontSize: '0.9rem' }}>{msg}</div>}
-                            
-                            <button className="btn" type="submit">
-                                {mode === 'login' ? 'Unlock App' : mode === 'register' ? 'Create Account' : 'Send Reset Link'}
-                            </button>
-                        </form>
-
-                        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.9rem' }}>
-                            {mode === 'login' && (
-                                <>
-                                    <div style={{ marginBottom: '10px' }}><a href="#" onClick={(e) => { e.preventDefault(); setMode('register'); setError(''); }}>Create an account</a></div>
-                                    <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); setError(''); }}>Forgot password?</a></div>
-                                </>
-                            )}
-                            {mode === 'register' && (
-                                <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setError(''); }}>Back to Login</a></div>
-                            )}
-                            {mode === 'forgot' && (
-                                <div><a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); setError(''); }}>Back to Login</a></div>
-                            )}
-                        </div>
+                <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center', alignItems: 'center' }}>
+                    <h1 style={{ marginBottom: '2rem' }}>Welcome Back</h1>
+                    <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', padding: '40px' }}>
+                        <p style={{ marginBottom: '0' }}>Sign in to track your progress</p>
+                        <div id="buttonDiv"></div>
                     </div>
                 </div>
             );
-        }
-
-        function ResetPassword({ token, onComplete }) {
-             const [password, setPassword] = useState('');
-             const [msg, setMsg] = useState('');
-             const [error, setError] = useState('');
-
-             const handleSubmit = async (e) => {
-                 e.preventDefault();
-                 try {
-                     await axios.post('/reset-password', { token, new_password: password });
-                     setMsg('Password updated! Redirecting...');
-                     setTimeout(() => {
-                         window.history.replaceState({}, document.title, "/"); // Clear URL
-                         onComplete();
-                     }, 2000);
-                 } catch (err) {
-                    setError(err.response?.data?.detail || 'Failed to reset password');
-                 }
-             };
-
-             return (
-                <div className="page-container animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: '90vh', justifyContent: 'center' }}>
-                    <h1>Set New Password</h1>
-                    <div className="glass-card">
-                         {msg ? (
-                             <div style={{ textAlign: 'center', color: 'lime' }}>{msg}</div>
-                         ) : (
-                            <form onSubmit={handleSubmit}>
-                                <div style={{ marginBottom: '24px' }}>
-                                    <label className="set-label">New Password</label>
-                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-                                </div>
-                                {error && <div style={{ color: 'red', marginBottom: '16px', fontSize: '0.9rem' }}>{error}</div>}
-                                <button className="btn" type="submit">Update Password</button>
-                            </form>
-                         )}
-                    </div>
-                </div>
-             );
         }
 
         function Navbar({ page, setPage, onLogout }) {
@@ -462,10 +384,6 @@
             const [token, setToken] = useState(localStorage.getItem('token'));
             const [selectedMuscle, setSelectedMuscle] = useState(null);
             const [selectedHistory, setSelectedHistory] = useState(null);
-            
-            // Checks for reset token in URL
-            const urlParams = new URLSearchParams(window.location.search);
-            const resetToken = urlParams.get('token');
 
             useEffect(() => {
                 if (token) {
@@ -500,10 +418,6 @@
                 setSelectedMuscle(null);
                 setPage('history');
             };
-
-            if (resetToken) {
-                return <ResetPassword token={resetToken} onComplete={() => window.location.href = '/'} />;
-            }
 
             if (!token) {
                 return <Auth onLogin={setToken} />;

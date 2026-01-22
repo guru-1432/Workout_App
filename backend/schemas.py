@@ -13,7 +13,10 @@ class UserBase(BaseModel):
     email: str
 
 class UserCreate(UserBase):
-    password: str
+    password: Optional[str] = None
+
+class GoogleLogin(BaseModel):
+    token: str
 
 class User(UserBase):
     id: int
